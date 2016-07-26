@@ -1,32 +1,43 @@
-var app = require('express')();
+var express=require('express');
+var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var path = require('path');
- 
-// Initialize appication with route / (that means root of the application)
-app.get('/', function(req, res){
-  var express=require('express');
-  app.use(express.static(path.join(__dirname)));
-  res.sendFile(__dirname + '/index.html');
-});
+var logger = require('morgan');
+var cookieParser = require('cookie-parser');
+var bodyParser = require('body-parser');
+var session = require('express-session');
+var passport = require('passport');
+var bCrypt = require('bcrypt-nodejs');
+var async = require('async');
+var crypto = require('crypto');
+var mongoose = require('mongoose');
+mongoose.connect('mongodb://localhost/shw');
+require('./models/user');
 
-var users=[]; 
-// Register events on socket connection
-io.on('connection', function(socket){
-	socket.on('user name',function(user_name){
-		users.push({id:socket.id,user_name:user_name});
-		len=users.length;
-		io.emit('userjoin', 'System', user_name);
-    });
-  	socket.on('chatMessage', function(from, msg, to){
-  		for(var i=0;i<users.length;i++){
-  			if(users[i].user_name==to){
-	    		socket.broadcast.to(users[i].id).emit( 'chatMessage', from, msg, to );
-	    	}
-    	}
-  	});
-});
- 
+require('./models/message');
+
+require('./config/passport')(passport);
+
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'ejs');
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(logger('dev'));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(cookieParser());
+app.use(session({ secret: 'shsh' }));
+app.use(passport.initialize());
+app.use(passport.session());
+
+require('./controllers/index.js')(app);
+require('./controllers/user.js')(app);
+require('./controllers/chat.js')(app);
+
+var sockets=[];
+require('./sockets/beginchat.js')(io,sockets);
+
 // Listen application request on port 3000
 http.listen(3000, function(){
   console.log('listening on *:3000');
